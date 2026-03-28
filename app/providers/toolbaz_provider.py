@@ -15,9 +15,9 @@ import httpx
 from app.core.config import settings
 from app.utils.sse_utils import create_sse_data, create_chat_completion_chunk, DONE_CHUNK
 
-# --- 单个工作单元 (Worker) ---
+# --- Unitate de lucru (Worker) ---
 class BrowserWorker:
-    """代表一个独立的浏览器无痕窗口"""
+    """Reprezintă o fereastră incognito independentă a browserului"""
     def __init__(self, browser):
         self.browser = browser
         self.context: Optional[BrowserContext] = None
@@ -27,35 +27,33 @@ class BrowserWorker:
         self.id = str(uuid.uuid4())[:8]
 
     async def init(self):
-        """初始化这个窗口"""
+        """Inițializează această fereastră"""
         try:
             if self.context:
                 await self.close()
 
-            # 创建无痕上下文
+            # Creare context incognito
             self.context = await self.browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 viewport={"width": 1920, "height": 1080},
-                locale="zh-CN",
-                timezone_id="Asia/Shanghai",
+                locale="ro-RO",
+                timezone_id="Europe/Bucharest",
                 java_script_enabled=True,
                 bypass_csp=True,
                 ignore_https_errors=True
             )
             
             self.page = await self.context.new_page()
-            # 屏蔽 webdriver 特征
+            # Ascunde caracteristicile webdriver
             await self.page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
             
-            # 预热 (带重试机制)
-            logger.info(f"🔧 [Worker-{self.id}] 正在预热...")
+            # Preîncălzire (cu mecanism de reîncercare)
+            logger.info(f"🔧 [Worker-{self.id}] Se preîncălzește...")
             
             max_retries = 3
             for attempt in range(max_retries):
                 try:
-                    # 随机延迟
                     await asyncio.sleep(random.uniform(1, 2))
-                    
                     await self.page.goto(
                         "https://toolbaz.com/writer/chat-gpt-alternative", 
                         wait_until="domcontentloaded", 
@@ -64,43 +62,38 @@ class BrowserWorker:
                     break 
                 except PlaywrightError as e:
                     if "ERR_CONNECTION_CLOSED" in str(e) or "Timeout" in str(e):
-                        logger.warning(f"⚠️ [Worker-{self.id}] 预热失败 (尝试 {attempt+1}/{max_retries}): {e}")
+                        logger.warning(f"⚠️ [Worker-{self.id}] Preîncălzire eșuată (încercarea {attempt+1}/{max_retries}): {e}")
                         if attempt == max_retries - 1:
                             raise e 
                         await asyncio.sleep(5) 
                     else:
                         raise e
 
-            # 稍微动一下鼠标
-            try:
-                await self.page.mouse.move(random.randint(100, 500), random.randint(100, 500))
-            except: pass
-            
             self.created_at = time.time()
             self.uses_count = 0
-            logger.info(f"✅ [Worker-{self.id}] 就绪")
+            logger.info(f"✅ [Worker-{self.id}] Pregătit")
             return True
         except Exception as e:
-            logger.error(f"❌ [Worker-{self.id}] 初始化失败: {e}")
+            logger.error(f"❌ [Worker-{self.id}] Inițializare eșuată: {e}")
             await self.close()
             return False
 
     async def get_token_data(self):
-        """在这个特定窗口中获取 Token"""
+        """Obține Token-ul din această fereastră specifică"""
         if not self.page or self.page.is_closed():
             success = await self.init()
             if not success:
-                return {"error": "Worker re-init failed"}
+                return {"error": "Reinițializarea worker-ului a eșuat"}
 
         try:
             await self.page.wait_for_function("typeof window.xA1pY === 'function' || typeof xA1pY === 'function'", timeout=5000)
         except:
             try:
-                logger.warning(f"⚠️ [Worker-{self.id}] 函数未就绪，尝试刷新页面...")
+                logger.warning(f"⚠️ [Worker-{self.id}] Funcția nu este gata, se reîmprospătează pagina...")
                 await self.page.reload(wait_until="domcontentloaded", timeout=30000)
                 await asyncio.sleep(2)
             except Exception as e:
-                return {"error": f"Reload failed: {str(e)}"}
+                return {"error": f"Reîmprospătare eșuată: {str(e)}"}
 
         result = await self.page.evaluate("""() => {
             try {
@@ -121,7 +114,7 @@ class BrowserWorker:
                 let token = "";
                 if (typeof window.xA1pY === 'function') token = window.xA1pY();
                 else if (typeof xA1pY === 'function') token = xA1pY();
-                else return { error: "xA1pY missing" };
+                else return { error: "xA1pY lipsește" };
 
                 return { sessionId, token };
             } catch (e) { return { error: e.toString() }; }
@@ -137,7 +130,7 @@ class BrowserWorker:
         self.context = None
         self.page = None
 
-# --- 核心提供者 (Provider) ---
+# --- Furnizor Principal (Provider) ---
 class ToolbazProvider:
     def __init__(self):
         self.playwright = None
@@ -146,13 +139,12 @@ class ToolbazProvider:
         self.api_token_url = "https://data.toolbaz.com/token.php"
         self.api_writing_url = "https://data.toolbaz.com/writing.php"
         
-        # 🔥 限流器变量
         self.request_timestamps: List[float] = []
         self.rate_limit_lock = asyncio.Lock()
 
     async def initialize(self):
-        """启动浏览器并创建池子"""
-        logger.info(f"🚀 正在启动浏览器集群 (并发数: {settings.BROWSER_POOL_SIZE})...")
+        """Pornește cluster-ul de browsere"""
+        logger.info(f"🚀 Se pornește clusterul de browsere (concurență: {settings.BROWSER_POOL_SIZE})...")
         self.playwright = await async_playwright().start()
         
         launch_args = [
@@ -173,36 +165,32 @@ class ToolbazProvider:
             asyncio.create_task(self._init_and_push_worker(worker))
             await asyncio.sleep(3)
         
-        logger.info(f"✅ 浏览器池启动指令已下发...")
+        logger.info(f"✅ Comenzile de pornire pentru browsere au fost trimise...")
 
     async def _init_and_push_worker(self, worker: BrowserWorker):
         success = await worker.init()
         if success:
             await self.pool.put(worker)
         else:
-            logger.warning(f"⚠️ Worker-{worker.id} 初始化失败，10秒后重试...")
+            logger.warning(f"⚠️ Worker-{worker.id} inițializare eșuată, reîncercare în 10 secunde...")
             await asyncio.sleep(10)
             await self._init_and_push_worker(worker)
 
     async def _wait_for_rate_limit(self):
-        """🔥 核心限流逻辑：确保每分钟不超过5次请求"""
+        """Limitator de rată: maxim 5 cereri pe minut"""
         async with self.rate_limit_lock:
             current_time = time.time()
-            # 清理超过60秒的旧记录
             self.request_timestamps = [t for t in self.request_timestamps if current_time - t < 60]
             
-            # 限制为每分钟 5 次 (留1次余量，设为4次比较安全)
             MAX_REQUESTS_PER_MINUTE = 4 
             
             if len(self.request_timestamps) >= MAX_REQUESTS_PER_MINUTE:
-                # 计算需要等待的时间
                 oldest_request = self.request_timestamps[0]
                 wait_time = 60 - (current_time - oldest_request) + 1
                 if wait_time > 0:
-                    logger.warning(f"🚦 触发速率限制 (5req/min)，正在排队等待 {wait_time:.2f} 秒...")
+                    logger.warning(f"🚦 Limită de rată activă (5 cereri/min), se așteaptă {wait_time:.2f} secunde...")
                     await asyncio.sleep(wait_time)
             
-            # 记录这次请求的时间
             self.request_timestamps.append(time.time())
 
     def _clean_response_text(self, text: str) -> str:
@@ -218,37 +206,33 @@ class ToolbazProvider:
         messages = request_data.get("messages", [])
         stream = request_data.get("stream", True)
         
-        last_user_content = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "Hello")
+        last_user_content = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "Salut")
         padding = "\u3164"
         formatted_text = f"{padding} : {last_user_content}{padding}"
 
-        # 1. 获取 Worker
-        logger.info(f"⏳ 正在等待空闲浏览器窗口 (当前可用: {self.pool.qsize()})...")
+        logger.info(f"⏳ Se așteaptă fereastră browser disponibilă (disponibile acum: {self.pool.qsize()})...")
         worker: BrowserWorker = await self.pool.get()
         
         try:
-            logger.info(f"🤖 使用窗口 [Worker-{worker.id}] 处理请求...")
+            logger.info(f"🤖 Se folosește [Worker-{worker.id}] pentru procesare...")
             
             if worker.uses_count > settings.CONTEXT_MAX_USES:
-                logger.info(f"♻️ 窗口 [Worker-{worker.id}] 使用次数过多，正在重建...")
+                logger.info(f"♻️ [Worker-{worker.id}] a atins limita de utilizări, se reconstruiește...")
                 await worker.init()
 
-            # 2. 获取凭证
             security_data = await worker.get_token_data()
             if security_data.get("error"):
-                logger.error(f"❌ [Worker-{worker.id}] Token获取失败: {security_data.get('error')}")
+                logger.error(f"❌ [Worker-{worker.id}] Eroare obținere Token: {security_data.get('error')}")
                 await worker.init()
                 security_data = await worker.get_token_data()
                 if security_data.get("error"):
-                    raise Exception(f"Token生成失败: {security_data['error']}")
+                    raise Exception(f"Generare Token eșuată: {security_data['error']}")
 
             session_id = security_data["sessionId"]
             payload_token = security_data["token"]
 
-            # 🔥 3. 在发送请求前，执行限流检查
             await self._wait_for_rate_limit()
 
-            # 4. 发送 HTTP 请求
             async with httpx.AsyncClient() as client:
                 headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -266,11 +250,11 @@ class ToolbazProvider:
                 )
                 
                 if token_resp.status_code != 200:
-                    raise ValueError(f"Token API 状态码错误: {token_resp.status_code}")
+                    raise ValueError(f"Eroare API Token (Cod: {token_resp.status_code})")
                 
                 token_json = token_resp.json()
                 if not token_json.get("success"):
-                    raise ValueError(f"Token API 拒绝: {token_json}")
+                    raise ValueError(f"API Token a refuzat cererea: {token_json}")
                 
                 capcha_token = token_json["token"]
 
@@ -286,23 +270,20 @@ class ToolbazProvider:
                     timeout=120
                 )
                 
-                # 🔥 专门捕获 400 Quota Limit 错误
                 if chat_resp.status_code == 400 and "quota limit" in chat_resp.text:
-                    logger.warning("⚠️ 触发 API 硬性限流，返回 429 给客户端")
-                    # 归还 worker，因为 worker 本身没问题，是 IP 没额度了
+                    logger.warning("⚠️ Limită de cotă API atinsă, se returnează 429")
                     await self.pool.put(worker)
-                    return JSONResponse({"error": "Rate limit exceeded (5 req/min). Please wait."}, status_code=429)
+                    return JSONResponse({"error": "Limita de rată a fost depășită (5 cereri/min)."}, status_code=429)
 
                 if chat_resp.status_code != 200:
-                    raise ValueError(f"Writing API 错误: {chat_resp.status_code} - {chat_resp.text[:100]}")
+                    raise ValueError(f"Eroare API Scriere: {chat_resp.status_code} - {chat_resp.text[:100]}")
                 
                 clean_text = self._clean_response_text(chat_resp.text)
                 request_id = f"chatcmpl-{uuid.uuid4()}"
 
-                # 5. 返回结果
                 if not stream:
                     await self.pool.put(worker)
-                    logger.info(f"🔙 窗口 [Worker-{worker.id}] 已归还")
+                    logger.info(f"🔙 [Worker-{worker.id}] a fost eliberat")
                     return JSONResponse({
                         "id": request_id,
                         "object": "chat.completion",
@@ -322,25 +303,25 @@ class ToolbazProvider:
                         yield DONE_CHUNK
                     finally:
                         await self.pool.put(worker)
-                        logger.info(f"🔙 窗口 [Worker-{worker.id}] 已归还 (流结束)")
+                        logger.info(f"🔙 [Worker-{worker.id}] a fost eliberat (stream finalizat)")
 
                 return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
         except Exception as e:
-            logger.error(f"❌ [Worker-{worker.id}] 处理严重错误: {e}")
+            logger.error(f"❌ [Worker-{worker.id}] Eroare critică: {e}")
             asyncio.create_task(self._recycle_worker(worker))
             raise HTTPException(status_code=500, detail=str(e))
 
     async def _recycle_worker(self, worker: BrowserWorker):
-        """后台回收并重置 Worker"""
-        logger.info(f"🔧 [Worker-{worker.id}] 正在后台重置...")
+        """Reciclează și resetează un Worker în fundal"""
+        logger.info(f"🔧 [Worker-{worker.id}] Se resetează în fundal...")
         await asyncio.sleep(5)
         success = await worker.init()
         if success:
             await self.pool.put(worker)
-            logger.info(f"✅ [Worker-{worker.id}] 重置成功并归还池子")
+            logger.info(f"✅ [Worker-{worker.id}] Resetat cu succes și eliberat în pool")
         else:
-            logger.error(f"💀 [Worker-{worker.id}] 重置失败，尝试再次重置...")
+            logger.error(f"💀 [Worker-{worker.id}] Resetare eșuată, reîncercare...")
             await asyncio.sleep(10)
             await self._recycle_worker(worker)
 
