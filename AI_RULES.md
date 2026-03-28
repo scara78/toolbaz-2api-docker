@@ -1,42 +1,26 @@
-# 🤖 Toolbaz-2API AI Development Rules
+# 🤖 Reguli de Dezvoltare AI pentru Toolbaz-2API
 
-This document outlines the architectural standards and library usage rules for the Toolbaz-2API project to ensure consistency and maintainability.
+Acest document stabilește standardele de arhitectură și regulile de utilizare a bibliotecilor pentru a asigura consistența proiectului.
 
-## 🛠️ Tech Stack
+## 🛠️ Stivă Tehnologică
 
-- **Backend Framework**: FastAPI (Python 3.10+) for high-performance, asynchronous API endpoints and OpenAI compatibility.
-- **Browser Automation**: Playwright (Python) for headless browser interactions and executing dynamic JavaScript in the background.
-- **Configuration Management**: Pydantic Settings for type-safe environment variable parsing and application configuration.
-- **Asynchronous Networking**: `httpx` for all non-blocking HTTP requests to external services.
-- **Concurrency & Pooling**: Custom `BrowserWorker` implementation using `asyncio.Queue` for efficient browser instance management.
-- **Logging**: Loguru for structured, color-coded, and easily searchable diagnostic logs.
-- **Containerization**: Docker & Docker Compose for standardized deployment and shared memory (`shm_size`) optimization.
-- **Frontend**: Single-page static HTML/JS/CSS located in `static/` for a lightweight "Developer Cockpit" experience.
+- **Framework Backend**: FastAPI (Python 3.10+) pentru performanță ridicată și compatibilitate OpenAI.
+- **Automatizare Browser**: Playwright (Python) pentru interacțiuni headless și execuție JavaScript.
+- **Gestionare Configurare**: Pydantic Settings pentru variabile de mediu tipizate.
+- **Networking Asincron**: `httpx` pentru toate cererile HTTP non-blocking.
+- **Logare**: Loguru pentru diagnoză structurată.
+- **Frontend**: Pagina statică HTML/JS/CSS în `static/` pentru o experiență de cockpit simplă.
 
-## 📏 Library & Implementation Rules
+## 📏 Reguli de Implementare
 
-### 1. API & Routing
-- Always use **FastAPI** for new endpoints.
-- Maintain OpenAI compatibility for all `/v1/chat/completions` responses.
-- Use the `sse_utils.py` for all streaming (Server-Sent Events) responses.
+### 1. API & Rute
+- Folosiți întotdeauna **FastAPI** pentru rute noi.
+- Mențineți compatibilitatea OpenAI pentru toate răspunsurile de tip `/v1/chat/completions`.
+- Utilizați `sse_utils.py` pentru toate răspunsurile de tip streaming (Server-Sent Events).
 
-### 2. Browser Automation
-- All browser interactions **must** go through the `BrowserWorker` class.
-- Do not instantiate Playwright browsers directly in routes; use the `ToolbazProvider` pool.
-- Use `page.evaluate()` for JavaScript-based token extraction to bypass complex obfuscation.
+### 2. Automatizare Browser
+- Toate interacțiunile cu browserul **trebuie** să treacă prin clasa `BrowserWorker`.
+- Nu instanțiați browsere Playwright direct în rute; folosiți pool-ul din `ToolbazProvider`.
 
-### 3. State & Config
-- Add new settings to `app/core/config.py` within the `Settings` class.
-- Never hardcode credentials; always use `.env` files via Pydantic.
-
-### 4. Concurrency
-- Use `async`/`await` for all I/O bound tasks (database, network, browser).
-- Implement rate limiting at the Provider level using `asyncio.Lock` to respect upstream quotas.
-
-### 5. Error Handling
-- Errors should bubble up to the FastAPI exception handlers.
-- Log critical failures with `logger.error` before raising `HTTPException`.
-
-### 6. Frontend
-- Keep the `static/index.html` simple and focused on testing the API.
-- Use vanilla JavaScript and CSS to avoid build-step complexities for this specific project.
+### 3. Erori
+- Logați eșecurile critice cu `logger.error` înainte de a ridica `HTTPException`.
