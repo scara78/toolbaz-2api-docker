@@ -19,6 +19,8 @@ class Settings(BaseSettings):
         "claude-sonnet-4",
         "gpt-5",
         "grok-4-fast"
+        "gpt-4o-latest"
+        "gpt-5.2"
     ]
     DEFAULT_MODEL: str = "toolbaz-v4.5-fast"
 
